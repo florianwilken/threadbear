@@ -83,6 +83,9 @@ export type Config = {
     // Unset is full, so an install from before it changes nothing; setup
     // writes "auto" into a new install's runner.json (scripts/setup.mjs).
     permissionMode?: DefaultMode;
+    // A folder's own default mode, over permissionMode, keyed by absolute
+    // folder (folder-defaults.ts).
+    folders?: Record<string, { permissionMode: DefaultMode }>;
   };
   // Where accounts are discovered. Tests can narrow these.
   claudeMainDir: string;
@@ -191,6 +194,9 @@ export type RunnerJson = {
     models?: Partial<Record<Provider, string>>;
     efforts?: Partial<Record<Provider, EffortLevel>>;
     permissionMode?: DefaultMode;
+    // "~/Code/x": { "permissionMode": "full" }: that folder's threads (and
+    // its worktrees') start on it when they name no mode.
+    folders?: Record<string, { permissionMode?: DefaultMode }>;
   };
   claudePath?: string;
   idleMinutes?: number;
@@ -462,6 +468,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, opts: { readOnl
       ...(models ? { models } : {}),
       ...(efforts ? { efforts } : {}),
       ...((m) => (m ? { permissionMode: m } : {}))(defaultModeOf(json.defaults?.permissionMode)),
+      ...((f) => (f ? { folders: f } : {}))(folderModes(json.defaults?.folders, expand)),
     },
     claudeMainDir: expand(env.THREADBEAR_CLAUDE_MAIN_DIR || '~/.claude'),
     claudeMainJson: expand(env.THREADBEAR_CLAUDE_MAIN_JSON || '~/.claude.json'),
@@ -564,6 +571,18 @@ function providerMap<V>(raw: unknown, read: (v: unknown) => V | undefined): Part
   for (const [p, v] of Object.entries(raw)) {
     const value = read(v);
     if (isProvider(p) && value !== undefined) out[p] = value;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+// runner.json defaults.folders: an absolute folder (after ~) to its mode.
+// An entry without a mode it may have (not Plan first) is ignored.
+function folderModes(v: unknown, expand: (p: string) => string): Record<string, { permissionMode: DefaultMode }> | undefined {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const out: Record<string, { permissionMode: DefaultMode }> = {};
+  for (const [folder, entry] of Object.entries(v)) {
+    const mode = defaultModeOf((entry as { permissionMode?: unknown } | null)?.permissionMode);
+    if (mode && folder.trim()) out[path.resolve(expand(folder.trim()))] = { permissionMode: mode };
   }
   return Object.keys(out).length ? out : undefined;
 }

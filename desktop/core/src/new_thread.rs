@@ -4,7 +4,7 @@
 // in DetailView.swift, AccountName, AccountUsageText). The Swift types' names
 // are in the comments; `desktop/gpui/src/new_thread.rs` draws what's here.
 use crate::inbox::{folder_name, parse_ms};
-use crate::logins::{provider_title, short_account_name, Account, Pool, RunnerLogins};
+use crate::logins::{provider_title, short_account_name, Account, FolderDefaults, Pool, RunnerLogins};
 use chrono::{DateTime, Datelike, Duration, TimeZone, Timelike};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -313,6 +313,28 @@ fn normalised(path: &str, home: &str) -> String {
         text.pop();
     }
     text
+}
+
+/// The mode of the folder in `folders` that holds `cwd`, the most specific
+/// winning (runner.json's `defaults.folders`). The runner has the same rule,
+/// and also matches a git worktree as its main checkout.
+pub fn folder_permission(folders: &HashMap<String, FolderDefaults>, cwd: &str, home: &str) -> Option<String> {
+    let folder = normalised(cwd, home);
+    if folder.is_empty() {
+        return None;
+    }
+    let mut best: Option<(&str, usize)> = None;
+    for (entry, defaults) in folders {
+        let (root, Some(mode)) = (normalised(entry, home), defaults.permission_mode.as_deref()) else { continue };
+        if root.is_empty() || !matches!(mode, "full" | "ask" | "auto") {
+            continue;
+        }
+        let inside = folder == root || folder.starts_with(&if root == "/" { "/".to_owned() } else { format!("{root}/") });
+        if inside && best.is_none_or(|(_, length)| root.len() > length) {
+            best = Some((mode, root.len()));
+        }
+    }
+    best.map(|(mode, _)| mode.to_owned())
 }
 
 /// `Pools.newThreadPool`: the one Mike picked for this draft, else its
@@ -729,12 +751,15 @@ impl Draft<'_> {
         self.logins.account(&self.account_id()).map_or_else(|| "claude".to_owned(), |a| a.provider_id().to_owned())
     }
 
-    /// `AppModel.newThreadPermission`: picked, else the last one picked for a
-    /// new thread, else the runner's default, else full access.
+    /// `AppModel.newThreadPermission`: picked, else its folder's own mode,
+    /// else the last one picked for a new thread, else the runner's default,
+    /// else full access. The folder's comes before the last one picked, as a
+    /// folder's pool does: it's set for that folder on purpose.
     pub fn permission(&self) -> String {
         self.picks
             .permission
             .clone()
+            .or_else(|| folder_permission(&self.logins.defaults.folders, &self.cwd(), self.home))
             .or_else(|| self.mem.last_permission.clone())
             .or_else(|| self.logins.defaults.permission_mode.clone())
             .filter(|m| !m.is_empty())
@@ -1171,6 +1196,28 @@ mod tests {
         assert_eq!(mem.last_permission.as_deref(), Some("full"), "Plan first is for one task");
         let picked = NewThreadPicks { permission: Some("ask".into()), ..Default::default() };
         assert_eq!(draft(&l, &picked, &mem).permission(), "ask");
+    }
+
+    #[test]
+    fn a_folder_with_its_own_mode_starts_on_it_over_the_last_picked() {
+        let l = RunnerLogins::from_hello(&json!({
+            "accounts": [{ "id": "claude-main", "provider": "claude" }],
+            "defaults": { "cwd": "/Users/alex/code/misc", "accountId": "claude-main", "permissionMode": "auto",
+                "folders": { "/Users/alex/code/repo": { "permissionMode": "full" }, "/Users/alex/code/repo/inner": { "permissionMode": "ask" }, "/x": { "permissionMode": "plan" } } }
+        }));
+        let mut mem = Remembered::default();
+        let at = |cwd: &str| NewThreadPicks { cwd: Some(cwd.into()), ..Default::default() };
+        assert_eq!(draft(&l, &NewThreadPicks::default(), &mem).permission(), "auto", "the runner's default elsewhere");
+        assert_eq!(draft(&l, &at("/Users/alex/code/repo"), &mem).permission(), "full");
+        assert_eq!(draft(&l, &at("~/code/repo/src"), &mem).permission(), "full", "under it, written with ~");
+        assert_eq!(draft(&l, &at("/Users/alex/code/repo/inner"), &mem).permission(), "ask", "the longer folder");
+        assert_eq!(draft(&l, &at("/Users/alex/code/repo-2"), &mem).permission(), "auto");
+        assert_eq!(draft(&l, &at("/x"), &mem).permission(), "auto", "Plan first is never a default");
+        mem.set_permission("ask");
+        assert_eq!(draft(&l, &at("/Users/alex/code/repo"), &mem).permission(), "full", "over the last one picked");
+        assert_eq!(draft(&l, &NewThreadPicks::default(), &mem).permission(), "ask");
+        let picked = NewThreadPicks { permission: Some("auto".into()), ..at("/Users/alex/code/repo") };
+        assert_eq!(draft(&l, &picked, &mem).create_params("x", vec![], false)["permissionMode"], "auto", "a mode picked for this draft wins");
     }
 
     #[test]

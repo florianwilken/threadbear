@@ -140,6 +140,17 @@ pub struct RunnerDefaults {
     pub efforts: HashMap<String, String>,
     #[serde(default, deserialize_with = "crate::wire::field")]
     pub permission_mode: Option<String>,
+    /// A folder's own mode, over `permission_mode` (runner.json's
+    /// `defaults.folders`), keyed by absolute folder.
+    #[serde(default, deserialize_with = "crate::wire::map")]
+    pub folders: HashMap<String, FolderDefaults>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct FolderDefaults {
+    #[serde(default, deserialize_with = "crate::wire::field")]
+    pub permission_mode: Option<String>,
 }
 
 impl RunnerDefaults {

@@ -5,7 +5,9 @@
 // install's runner.json (scripts/setup.mjs).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { makeHarness, testConfig, tmpDir } from '../helpers/fakes.ts';
 import { loadConfig, writeRunnerJson } from '../../src/config.ts';
 import { startOwnThread } from '../../src/own-threads.ts';
@@ -62,4 +64,57 @@ test("the runner's own threads start on the install's default mode", () => {
   const h = makeHarness();
   assert.equal(h.runner.get(startOwnThread(h.runner, { text: 'x', title: 'x', why: 'x' }, undefined)).permissionMode, 'full');
   assert.equal(h.runner.get(h.runner.noticeOnMac(undefined, 'A dialog', 'x')).permissionMode, 'full');
+});
+
+// runner.json's defaults.folders (folder-defaults.ts): a folder's own mode
+// over the overall one, for a repo whose Claude settings only load on Full
+// access, without making Full the default everywhere (Florian, 17 Nov 2026).
+test('config: defaults.folders is read with ~ expanded; entries without a usable mode are ignored', () => {
+  const home = tmpDir();
+  writeRunnerJson(home, { defaults: { permissionMode: 'auto', folders: { '~/code/repo': { permissionMode: 'full' }, '/x/plan': { permissionMode: 'plan' as never }, '/x/none': {}, '/x/junk': 3 as never } } });
+  const cfg = loadConfig({ THREADBEAR_HOME: home, HOME: '/Users/alex' });
+  assert.deepEqual(cfg.defaults.folders, { '/Users/alex/code/repo': { permissionMode: 'full' } });
+  assert.equal(cfg.defaults.permissionMode, 'auto');
+  writeRunnerJson(home, { defaults: { folders: { '/x': { permissionMode: 'plan' as never } } } });
+  assert.ok(!('folders' in loadConfig({ THREADBEAR_HOME: home }).defaults));
+});
+
+test("a thread in a folder with its own mode starts on it, the longest folder winning; elsewhere the overall default; a named mode wins", () => {
+  const h = makeHarness(undefined, { defaults: { cwd: '', permissionMode: 'auto' } });
+  const work = path.join(h.home, 'work');
+  const repo = path.join(work, 'repo');
+  const inner = path.join(repo, 'inner');
+  const other = path.join(work, 'other');
+  for (const d of [inner, other]) fs.mkdirSync(d, { recursive: true });
+  h.cfg.defaults.cwd = work;
+  h.cfg.defaults.folders = { [repo]: { permissionMode: 'full' }, [inner]: { permissionMode: 'ask' } };
+  assert.equal(h.runner.create({ text: 'hi', cwd: repo }).thread.permissionMode, 'full');
+  assert.equal(h.runner.create({ text: 'hi', cwd: path.join(repo, '.') }).thread.permissionMode, 'full');
+  assert.equal(h.runner.create({ text: 'hi', cwd: inner }).thread.permissionMode, 'ask', 'the longer folder');
+  assert.equal(h.runner.create({ text: 'hi', cwd: other }).thread.permissionMode, 'auto');
+  assert.equal(h.runner.create({ text: 'hi' }).thread.permissionMode, 'auto', 'the default folder');
+  assert.equal(h.runner.create({ text: 'hi', cwd: repo, origin: 'schedule', scheduleId: 'sc1' }).thread.permissionMode, 'full', 'a schedule with no mode');
+  assert.equal(h.runner.create({ text: 'hi', cwd: repo, permissionMode: 'ask' }).thread.permissionMode, 'ask');
+  // A folder named "repo-2" isn't under "repo".
+  fs.mkdirSync(repo + '-2');
+  assert.equal(h.runner.create({ text: 'hi', cwd: repo + '-2' }).thread.permissionMode, 'auto');
+  assert.deepEqual(h.runner.hello().defaults.folders, { [repo]: { permissionMode: 'full' }, [inner]: { permissionMode: 'ask' } });
+});
+
+test("a thread in a git worktree of a folder with its own mode starts on it", () => {
+  const h = makeHarness(undefined, { defaults: { cwd: '', permissionMode: 'auto' } });
+  fs.mkdirSync(path.join(h.home, 'repo'));
+  const repo = fs.realpathSync(path.join(h.home, 'repo'));
+  const git = (...args: string[]) => execFileSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { stdio: 'ignore' });
+  git('init', '-q');
+  git('commit', '-q', '--allow-empty', '-m', 'first');
+  const tree = path.join(h.home, 'repo-threads', 'slot-1');
+  git('worktree', 'add', '-q', '-b', 'thread/x', tree);
+  h.cfg.defaults.cwd = repo;
+  h.cfg.defaults.folders = { [repo]: { permissionMode: 'full' } };
+  assert.equal(h.runner.create({ text: 'hi', cwd: tree, worktree: false }).thread.permissionMode, 'full');
+});
+
+test('with no folders, hello says nothing about them', () => {
+  assert.ok(!('folders' in makeHarness().runner.hello().defaults));
 });

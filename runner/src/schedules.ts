@@ -24,6 +24,7 @@ import type { EffortLevel, PermissionMode, Schedule } from './protocol.ts';
 import { EFFORT_LEVELS, ErrorCode, RpcError, isEffortLevel } from './protocol.ts';
 import { atomicWriteFileSync, isDirectory, readJsonSync } from './fsutil.ts';
 import { expandHome } from './config.ts';
+import { defaultModeFor } from './folder-defaults.ts';
 import { standInFor } from './pools.ts';
 import { CronError, checkZone, describeAt, describeCron, localZone, nextRun, nextRuns, parseCron } from './cron.ts';
 import { cutSafely, firstLineSafely } from './safe-cut.ts';
@@ -1655,7 +1656,7 @@ export class Scheduler {
     // full (Daybreak, 10 Nov: on an Ask-default runner, an Ask thread set
     // one to Auto as if lowering it). Only this runner's default is known.
     const defaults = this.runner.cfg?.defaults;
-    if (!rec.threadId && !rec.permissionMode && this.mine(rec) && defaults) v.defaultMode = defaults.permissionMode ?? 'full';
+    if (!rec.threadId && !rec.permissionMode && this.mine(rec) && defaults) v.defaultMode = defaultModeFor(defaults, rec.cwd) ?? 'full';
     else delete v.defaultMode;
     if (rec.runnerId) {
       const own = rec.runnerId === this.self.id;
