@@ -440,8 +440,26 @@ new install the default is Auto; an install from before 9 Nov 2026 keeps
 Full access. Threads you start from the phone, the website, `tb new` or a
 schedule with no mode of its own start on the default. It's `"defaults": { "permissionMode": "auto" }` in `runner.json`
 in the data folder (`"full"`, `"ask"` or `"auto"`; none is Full access), so
-ask any thread to change it. It applies once the runner next restarts. The
-threads Threadbear starts by itself, to bring in Mike's releases or fix a
+ask any thread to change it. It applies once the runner next restarts.
+
+A folder can have its own default, for a repo that only works on one mode
+(say, its Claude settings allow commands Threadbear can't vet, so they only
+load on Full access). Add it under `defaults` in `runner.json`, keeping the
+overall one:
+
+```json
+"defaults": {
+  "permissionMode": "auto",
+  "folders": { "~/Code/my-repo": { "permissionMode": "full" } }
+}
+```
+
+Threads in that folder, any folder under it, and its worktrees start on it,
+the most specific folder winning; on the Mac it comes before the mode you
+last picked. A mode you pick for a thread still wins. Only `runner.json` sets
+it, never the repo, and it applies once the runner next restarts.
+
+The threads Threadbear starts by itself, to bring in Mike's releases or fix a
 failed update, start on it too, so on Ask before edits (or Auto on Codex,
 which asks before edits) they wait for you to allow what they need. Deleting
 a thread is one thing an agent always has to ask about, whatever the mode.

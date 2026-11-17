@@ -294,7 +294,8 @@ File references are where to look.
   edits. An install set up before 9 Nov 2026 keeps starting threads on
   full access (Claude with `bypassPermissions`, Codex with
   `danger-full-access`). `"defaults": { "permissionMode": ... }` in
-  `runner.json` (`"full"`, `"auto"` or `"ask"`) sets it, and each thread
+  `runner.json` (`"full"`, `"auto"` or `"ask"`) sets it, `"folders"` beside
+  it sets one folder's own (`runner/src/folder-defaults.ts`), and each thread
   can pick its own. The threads the runner starts by itself (bringing in
   Mike's releases, fixing a failed update to main and rebuilding your
   changes to the old Mac app, all below, and a note about this Mac) start on that default too

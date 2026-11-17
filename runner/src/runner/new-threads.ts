@@ -10,6 +10,7 @@ import { ErrorCode, LIMITS, RpcError } from '../protocol.ts';
 import type { Schedule } from '../protocol.ts';
 import type { ThreadRecord } from '../store.ts';
 import { expandHome, peekRunnerJson } from '../config.ts';
+import { defaultModeFor } from '../folder-defaults.ts';
 import { isDirectory } from '../fsutil.ts';
 import { standInFor } from '../pools.ts';
 import { ASK_CODEX_MODEL, HAIKU } from '../models/index.ts';
@@ -269,8 +270,9 @@ export const newThreadsPart = {
       accountId,
       ...(poolId ? { poolId } : {}),
       provider: account.provider,
-      // None named: runner.json's default (a new install's is auto), else full.
-      permissionMode: params.permissionMode ?? this.cfg.defaults.permissionMode ?? 'full',
+      // None named: runner.json's default for this folder, else its overall
+      // one (a new install's is auto), else full.
+      permissionMode: params.permissionMode ?? defaultModeFor(this.cfg.defaults, cwd) ?? 'full',
       status: 'idle',
       createdAt: now,
       updatedAt: now,

@@ -9,6 +9,7 @@ import type { RunnerPart } from './part.ts';
 import type { Account, EffortLevel, PermissionMode } from '../protocol.ts';
 import { ErrorCode, RpcError, isEffortLevel } from '../protocol.ts';
 import { expandHome } from '../config.ts';
+import { defaultModeFor } from '../folder-defaults.ts';
 import type { QueuedSend } from '../store.ts';
 import { claudeOptions, claudeSettingsWithoutCommands } from '../claude-trust.ts';
 import { commandList, parseCommand, planCommand, type CommandPlan, type SlashCommand } from '../slash-commands.ts';
@@ -148,9 +149,9 @@ export const commandsPart = {
     const accountId = params.accountId ?? this.defaultAccountId();
     if (!this.accounts.get(accountId)) throw new RpcError(ErrorCode.accountNotFound, `No account called ${accountId}`);
     const cwd = path.resolve(expandHome(params.cwd?.trim() ? params.cwd.trim() : this.cfg.defaults.cwd));
-    // A new Claude thread starts on Auto unless picked otherwise, so its
-    // allow rules wait for trust as they would (claudeOptions).
-    return this.listCommands(accountId, cwd, params.permissionMode ?? 'auto');
+    // On the mode it would start on, so its allow rules wait for trust as
+    // they would (claudeOptions).
+    return this.listCommands(accountId, cwd, params.permissionMode ?? defaultModeFor(this.cfg.defaults, cwd) ?? 'full');
   },
 
   async listCommands(this: Runner, accountId: string, cwd: string, permissionMode: PermissionMode, live?: () => Promise<SlashCommand[]>): Promise<{ commands: SlashCommand[] }> {

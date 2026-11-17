@@ -200,6 +200,9 @@ export type RunnerDefaults = {
   // The mode a threads.create with none starts on (runner.json's
   // defaults.permissionMode). Absent: full.
   permissionMode?: Exclude<PermissionMode, 'plan'>;
+  // A folder's own mode, over permissionMode, for a thread in it or under
+  // it (the longest folder wins). Keys are absolute paths.
+  folders?: Record<string, { permissionMode: Exclude<PermissionMode, 'plan'> }>;
 };
 
 export type ThreadStatus = 'idle' | 'starting' | 'running' | 'waiting' | 'error' | 'stopped';

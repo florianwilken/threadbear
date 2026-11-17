@@ -1413,6 +1413,7 @@ export class Runner {
     if (this.cfg.defaults.efforts) defaults.efforts = { ...this.cfg.defaults.efforts };
     // The app's composer starts a new thread on it.
     if (this.cfg.defaults.permissionMode) defaults.permissionMode = this.cfg.defaults.permissionMode;
+    if (this.cfg.defaults.folders) defaults.folders = structuredClone(this.cfg.defaults.folders);
     const out: ReturnType<Runner['hello']> = { runnerVersion: RUNNER_VERSION, protocol: PROTOCOL_VERSION, accounts, providers: providersForHello(), pools, defaults };
     const clis = this.cliList();
     if (clis) out.clis = clis;
